@@ -1,67 +1,66 @@
-from flask import Flask, request, jsonify, send_file, render_template
+"""Flask server that receives signed messages and serves them back.
+
+Local run (HTTPS, self-signed):   python server/app.py
+Hosted (e.g. Render):             gunicorn --chdir server app:app
+When the PORT environment variable is set, TLS is assumed to be terminated by the platform.
+"""
 import os
+import sys
+from pathlib import Path
+
+from flask import Flask, jsonify, request, send_file
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from utils.rsa_utils import parse_signed_text
 
 app = Flask(__name__, static_folder="static", static_url_path="/")
+app.config["MAX_CONTENT_LENGTH"] = 64 * 1024  # 64 KB is plenty for a message + signature
 
-# Correct base directory and receiver folder paths
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # Digital_Signature_RSA/
-RECEIVER_FOLDER = os.path.join(BASE_DIR, "receiver")
-CHECKED_MESSAGE_PATH = os.path.join(RECEIVER_FOLDER, "checked_message.txt")
+SERVER_DIR = Path(__file__).resolve().parent
+BASE_DIR = SERVER_DIR.parent
+RECEIVER_FOLDER = BASE_DIR / "receiver"
+CHECKED_MESSAGE_PATH = RECEIVER_FOLDER / "checked_message.txt"
+CERT_FILE = SERVER_DIR / "cert.pem"
+KEY_FILE = SERVER_DIR / "key.pem"
 
-# Paths for SSL certificates
-CERT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "cert.pem")
-KEY_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "key.pem")
-
-# Create receiver folder if it doesn't exist
-if not os.path.exists(RECEIVER_FOLDER):
-    os.makedirs(RECEIVER_FOLDER)
+RECEIVER_FOLDER.mkdir(exist_ok=True)
 
 
-# 📩 Route to receive the signed message
 @app.route("/api/receive", methods=["POST"])
 def receive_message():
+    signed_message = request.form.get("signed_message", "")
+    if not signed_message.strip():
+        return jsonify({"error": "No signed message received."}), 400
+
     try:
-        signed_message = request.form.get("signed_message")
+        message, signature = parse_signed_text(signed_message)
+    except ValueError as exc:
+        return jsonify({"error": f"Invalid format: {exc}"}), 400
 
-        # Check if message is received
-        if not signed_message:
-            return jsonify({"error": "❌ No signed message received."}), 400
-
-        # Save the received message to checked_message.txt
-        with open(CHECKED_MESSAGE_PATH, "w") as f:
-            f.write(signed_message)
-
-        print("✅ Message received and saved successfully!")
-        return jsonify({"success": "✅ Message received and saved successfully!"})
-
-    except Exception as e:
-        print(f"❌ Error receiving message: {str(e)}")
-        return jsonify({"error": f"❌ Internal Server Error: {str(e)}"}), 500
+    # Normalise line endings (browsers send CRLF) so verification sees what was signed.
+    CHECKED_MESSAGE_PATH.write_text(f"{message}\n{signature}")
+    return jsonify({"success": "Message received and saved successfully."})
 
 
-# 📥 Route to download the checked message
 @app.route("/api/download", methods=["GET"])
 def download_message():
-    try:
-        if os.path.exists(CHECKED_MESSAGE_PATH):
-            return send_file(CHECKED_MESSAGE_PATH, as_attachment=True)
-        else:
-            return jsonify({"error": "❌ No checked message found to download."}), 404
-
-    except Exception as e:
-        print(f"❌ Error downloading message: {str(e)}")
-        return jsonify({"error": f"❌ Internal Server Error: {str(e)}"}), 500
+    if not CHECKED_MESSAGE_PATH.exists():
+        return jsonify({"error": "No checked message found to download."}), 404
+    return send_file(CHECKED_MESSAGE_PATH, as_attachment=True)
 
 
-# 🟢 Home route for serving index.html
 @app.route("/")
 def home():
     return app.send_static_file("index.html")
 
 
 if __name__ == "__main__":
-    # ✅ Ensure cert and key files exist
-    if os.path.exists(CERT_FILE) and os.path.exists(KEY_FILE):
-        app.run(host="0.0.0.0", port=5000, ssl_context=(CERT_FILE, KEY_FILE))
+    port = int(os.environ.get("PORT", 5000))
+    host = os.environ.get("HOST", "127.0.0.1")
+    if os.environ.get("PORT"):
+        app.run(host="0.0.0.0", port=port)  # hosted: platform handles TLS
+    elif CERT_FILE.exists() and KEY_FILE.exists():
+        app.run(host=host, port=port, ssl_context=(str(CERT_FILE), str(KEY_FILE)))
     else:
-        print("❌ Error: SSL certificate or key not found. Check paths or regenerate them.")
+        # No certificate files: Flask generates a temporary self-signed one (needs `cryptography`).
+        app.run(host=host, port=port, ssl_context="adhoc")

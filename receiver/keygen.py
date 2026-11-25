@@ -1,13 +1,14 @@
+"""Generate the receiver's RSA key pair (reserved for future encryption)."""
+import argparse
 import sys
-import os
+from pathlib import Path
 
-# Get the parent directory (Digital_Signature_RSA)
-project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, project_path)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from utils.rsa_utils import ROOT, DEFAULT_KEY_BITS, generate_keys
 
-# /receiver/keygen.py
-from utils.rsa_utils import generate_keys
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--bits", type=int, default=DEFAULT_KEY_BITS)
+args = parser.parse_args()
 
-# Generate receiver's keys and store them
-generate_keys("receiver")
-print("✅ Receiver's keys generated successfully!")
+generate_keys(ROOT / "receiver", bits=args.bits)
+print(f"✅ Receiver's {args.bits}-bit keys generated in receiver/")

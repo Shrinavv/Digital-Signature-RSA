@@ -1,54 +1,55 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-    <title>Send Signed Message</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Digital Signature RSA</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 40px;
-            background-color: #f4f4f9;
-        }
-        h2 {
-            color: #333;
-        }
-        form {
-            background-color: #fff;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-            max-width: 500px;
-            margin-top: 20px;
-        }
-        input[type="text"], input[type="submit"] {
-            width: 100%;
-            padding: 12px;
-            margin-top: 10px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-        }
-        input[type="submit"] {
-            background-color: #28a745;
-            color: white;
-            cursor: pointer;
-        }
-        input[type="submit"]:hover {
-            background-color: #218838;
-        }
+        body { font-family: Arial, sans-serif; margin: 40px auto; max-width: 640px; padding: 0 16px; background: #f4f4f9; color: #222; }
+        h2 { color: #333; }
+        form { background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,.1); margin-top: 20px; }
+        textarea, input[type="submit"] { width: 100%; box-sizing: border-box; padding: 12px; margin-top: 10px; border: 1px solid #ccc; border-radius: 5px; font-family: monospace; }
+        textarea { min-height: 140px; resize: vertical; }
+        input[type="submit"] { background: #28a745; color: #fff; cursor: pointer; font-family: Arial, sans-serif; }
+        input[type="submit"]:hover { background: #218838; }
+        #status { margin-top: 12px; font-weight: bold; }
+        .ok { color: #1e7e34; } .err { color: #b02a37; }
+        small { color: #666; }
     </style>
 </head>
 <body>
     <h2>Send Signed Message</h2>
-    <!-- ✅ Corrected: Send message to the Flask backend using HTTPS -->
-    <form id="messageForm" action="https://127.0.0.1:5000/api/receive" method="post">
-        <label for="signed_message">Enter Signed Message:</label>
-        <input type="text" id="signed_message" name="signed_message" required>
+    <form id="messageForm">
+        <label for="signed_message">Paste the contents of <code>sender/signed_message.txt</code>:</label>
+        <textarea id="signed_message" name="signed_message" required
+                  placeholder="Your message&#10;123456789... (signature on the last line)"></textarea>
+        <small>Line 1 = message, last line = signature (digits only).</small>
         <input type="submit" value="Send Message">
+        <div id="status" role="status"></div>
     </form>
 
     <h2>Download Checked Message</h2>
-    <!-- ✅ Corrected: Download message using the correct API -->
-    <form action="https://127.0.0.1:5000/api/download" method="get">
+    <form action="/api/download" method="get">
         <input type="submit" value="Download Message">
     </form>
+
+    <script>
+        document.getElementById("messageForm").addEventListener("submit", async (event) => {
+            event.preventDefault();
+            const status = document.getElementById("status");
+            try {
+                const response = await fetch("/api/receive", {
+                    method: "POST",
+                    body: new URLSearchParams(new FormData(event.target)),
+                });
+                const data = await response.json();
+                status.className = response.ok ? "ok" : "err";
+                status.textContent = data.success || data.error;
+            } catch (error) {
+                status.className = "err";
+                status.textContent = "Could not reach the server.";
+            }
+        });
+    </script>
 </body>
 </html>

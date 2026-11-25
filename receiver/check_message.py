@@ -1,24 +1,24 @@
-import os
+"""Display the received message and its signature.
 
-# Path to signed_message.txt in receiver folder
-receiver_path = "receiver/signed_message.txt"
+Usage: python receiver/check_message.py [path-to-signed-file]
+Default file: receiver/checked_message.txt (written by the server).
+"""
+import sys
+from pathlib import Path
 
-# Check if the signed message file exists
-if os.path.exists(receiver_path):
-    # Read the content of the file
-    with open(receiver_path, "r") as f:
-        content = f.readlines()
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from utils.rsa_utils import ROOT, read_signed_file
 
-    # Validate file format (should contain 2 lines: message and signature)
-    if len(content) == 2:
-        # Extract message and signature
-        message = content[0].strip()
-        signature = content[1].strip()
-        
-        # Display message and signature
-        print(f"📨 Received Message: {message}")
-        print(f"✍️ Signature: {signature}")
-    else:
-        print("❌ Error: File format invalid or message not received properly.")
-else:
-    print("❌ Error: signed_message.txt not found in receiver folder.")
+path = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT / "receiver" / "checked_message.txt"
+if not path.exists():
+    print(f"❌ Error: {path} not found. Send a message first (python sender/transmit.py).")
+    sys.exit(1)
+
+try:
+    message, signature = read_signed_file(path)
+except ValueError as exc:
+    print(f"❌ Error: invalid file format: {exc}")
+    sys.exit(1)
+
+print(f"📨 Received Message: {message}")
+print(f"✍️ Signature: {signature}")

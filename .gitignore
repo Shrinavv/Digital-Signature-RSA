@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Generated keys and messages (never commit real keys)
+sender/private_key.txt
+sender/public_key.txt
+receiver/private_key.txt
+receiver/public_key.txt
+sender/message.txt
+sender/signed_message.txt
+receiver/signed_message.txt
+receiver/checked_message.txt
+server/receiver/
+
+# TLS material
+server/key.pem
+server/cert.pem
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Generated at runtime
+receiver/checked_message.txt

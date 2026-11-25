@@ -1,34 +1,24 @@
+"""Sign a message with the sender's private key (RSA, PKCS#1 v1.5, SHA-256)."""
 import sys
-import os
+from pathlib import Path
 
-# Get the parent directory (Digital_Signature_RSA)
-project_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
-sys.path.insert(0, project_path)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from utils.rsa_utils import ROOT, read_key, sign_message
 
-# Import required utilities
-from utils.rsa_utils import hash_message
-
-# Ask the sender to input the message
-message = input("✍️ Enter the message to be signed: ")
-
-# Save the message to message.txt
-with open("sender/message.txt", "w") as f:
-    f.write(message)
-print("📩 Message saved to sender/message.txt successfully!")
-
-# Read sender's private key
-try:
-    with open("sender/private_key.txt", "r") as f:
-        d, n = map(int, f.read().splitlines())
-except FileNotFoundError:
-    print("❌ Error: private_key.txt not found in sender folder. Run keygen.py first.")
+message = input("✍️ Enter the message to be signed: ").strip()
+if not message:
+    print("❌ Error: message cannot be empty.")
     sys.exit(1)
 
-# Hash and sign the message
-hashed_message = hash_message(message)
-signature = pow(hashed_message, d, n)
+try:
+    d, n = read_key(ROOT / "sender" / "private_key.txt")
+except FileNotFoundError:
+    print("❌ Error: sender/private_key.txt not found. Run: python sender/keygen.py")
+    sys.exit(1)
 
-# Write the signed message to signed_message.txt
-with open("sender/signed_message.txt", "w") as f:
-    f.write(f"{message}\n{signature}")
-print("✅ Message signed and saved to sender/signed_message.txt successfully!")
+(ROOT / "sender" / "message.txt").write_text(message)
+print("📩 Message saved to sender/message.txt")
+
+signature = sign_message(message, d, n)
+(ROOT / "sender" / "signed_message.txt").write_text(f"{message}\n{signature}")
+print("✅ Message signed and saved to sender/signed_message.txt")

@@ -1,56 +1,51 @@
-#++++++++++++++++++++++++++++++ Using shutil to tranfer files ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
-# import shutil
-# import os
+"""POST sender/signed_message.txt to the server over HTTPS.
 
-# # Define file paths
-# sender_path = "sender/signed_message.txt"
-# receiver_path = "receiver/signed_message.txt"
-
-# # Check if the signed message file exists
-# if os.path.exists(sender_path):
-#     # Check if the file already exists in the receiver folder
-#     if os.path.exists(receiver_path):
-#         print("⚠️ Warning: signed_message.txt already exists in receiver folder. Overwriting...")
-
-#     # Simulate sending the file by moving it to the receiver folder
-#     shutil.move(sender_path, receiver_path)
-#     print(f"📡 Message successfully transmitted to {receiver_path}")
-# else:
-#     print("❌ Error: signed_message.txt not found in sender folder. Run sign.py first.")
-
-#+++++++++++++++++++++++++++++++++++Using HTTPS to transfer files+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Usage:
+    python sender/transmit.py                      # local server (self-signed cert)
+    python sender/transmit.py --url https://my-app.onrender.com/api/receive
+Works from any directory.
+"""
+import argparse
+import os
+import sys
+from pathlib import Path
+from urllib.parse import urlparse
 
 import requests
-import os
 import urllib3
 
-# Disable SSL warnings for self-signed certificates (for local testing)
-urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+from utils.rsa_utils import ROOT
 
-# Define API endpoint of receiver using HTTPS
-url = "https://127.0.0.1:5000/api/receive"  # HTTPS enabled now!
+parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument("--url", default=os.environ.get("SIGNATURE_SERVER_URL", "https://127.0.0.1:5000/api/receive"))
+parser.add_argument("--file", default=str(ROOT / "sender" / "signed_message.txt"))
+args = parser.parse_args()
 
-# Define the path of the signed message
-sender_path = "../sender/signed_message.txt"
+path = Path(args.file)
+if not path.exists():
+    print("❌ Error: signed message not found. Run: python sender/sign.py")
+    sys.exit(1)
 
-# Check if the signed message file exists
-if os.path.exists(sender_path):
-    # Read the signed message
-    with open(sender_path, "r") as f:
-        signed_message = f.read()
+# The local dev server uses a self-signed certificate, so skip verification ONLY for localhost.
+host = urlparse(args.url).hostname
+is_local = host in ("127.0.0.1", "localhost", "::1")
+if is_local:
+    urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
-    # Send the signed message to the receiver using HTTPS POST
-    try:
-        # ✅ Send with verification disabled for self-signed certificate
-        response = requests.post(url, data={"signed_message": signed_message}, verify=False)
+try:
+    response = requests.post(
+        args.url,
+        data={"signed_message": path.read_text()},
+        verify=not is_local,
+        timeout=15,
+    )
+except requests.exceptions.RequestException as exc:
+    print(f"❌ Error: {exc}")
+    sys.exit(1)
 
-        # Check for successful transmission
-        if response.status_code == 200:
-            print("📡 Message successfully transmitted to the receiver via HTTPS!")
-        else:
-            print(f"❌ Error: Failed to transmit the message. Status code: {response.status_code}")
-
-    except Exception as e:
-        print(f"❌ Error: {str(e)}")
+if response.status_code == 200:
+    print("📡 Message successfully transmitted to the receiver via HTTPS!")
 else:
-    print("❌ Error: signed_message.txt not found in sender folder. Run sign.py first.")
+    print(f"❌ Error: server returned {response.status_code}: {response.text.strip()}")
+    sys.exit(1)
